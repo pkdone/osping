@@ -50,9 +50,10 @@ fn ping(host: &str) -> Result<(), Box<dyn Error>> {
             if output.status.success() {
                 Ok(())
             } else if !cfg!(windows) && (output.status.code().unwrap_or(-1) == 1) {
-                // Unix
+                // Unix  (Unix's Ping uses code 1 for connection error & code 2 for other errors)
                 Err(format!("Host '{}' cannot be reached over a network ICMP Ping", host).into())
             } else {
+                // Windows for all errors, Unix for non-connection related errors
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let err_msg =
@@ -69,9 +70,9 @@ fn ping(host: &str) -> Result<(), Box<dyn Error>> {
                         format!("Ping returned error indicating the DNS entry is not a hostname \
                             associated with an IP address.  OS OUTPUT RECEIVED: '{}'", stderr)
                     } else if cfg!(windows) {
-                        // Windows
+                        // Windows (Window's Ping uses stdout for errors rather than stderr
                         format!("Ping returned error.  OS OUTPUT RECEIVED - stdout: '{}' - stderr: \
-                        '{}'", stdout, stderr)
+                            '{}'", stdout, stderr)
                     } else {
                         // Unix
                         format!("Ping returned error.  OS OUTPUT RECEIVED: '{}'", stderr)
@@ -81,6 +82,7 @@ fn ping(host: &str) -> Result<(), Box<dyn Error>> {
             }
         }
         Err(e) => {
+            // Errors related to not being able to invoke Ping executable both on Windows & Unix
             debug_process_error(&e);
             let err_msg =
                 if e.kind() == ErrorKind::NotFound {
