@@ -5,8 +5,10 @@ use std::process::{exit, Command, Output};
 
 
 const PING_CMD: &str = "ping";
-const INTERVAL_ARG: &str = "-i 0.2";
-const COUNT_ARG: &str = "-c 3";
+const UNIX_INTERVAL_ARG: &str = "-i 0.2";
+const UNIX_COUNT_ARG: &str = "-c 3";
+const WINDOWS_COUNT_ARG_KEY: &str = "-n";
+const WINDOWS_COUNT_ARG_VAL: &str = "3";
 const LOG_DEBUG: bool = false;
 
 
@@ -32,29 +34,46 @@ fn main() -> Result<(), Box<dyn Error>> {
 // an ICMP ping
 //
 fn ping(host: &str) -> Result<(), Box<dyn Error>> {
-    let output_res = Command::new(PING_CMD)
-        .arg(INTERVAL_ARG)
-        .arg(COUNT_ARG)
-        .arg(host)
-        .output();
+    let mut cmd = &mut Command::new(PING_CMD);
+
+    if cfg!(windows) {
+        cmd = cmd.arg(WINDOWS_COUNT_ARG_KEY).arg(WINDOWS_COUNT_ARG_VAL);
+    } else {
+        cmd = cmd.arg(UNIX_COUNT_ARG).arg(UNIX_INTERVAL_ARG);
+    }
+
+    let output_res = cmd.arg(host).output();
     match output_res {
         Ok(output) => {
             debug_process_output(&output);
 
             if output.status.success() {
                 Ok(())
-            } else if output.status.code().unwrap_or(-1) == 1 {
+            } else if !cfg!(windows) && (output.status.code().unwrap_or(-1) == 1) {
+                // Unix
                 Err(format!("Host '{}' cannot be reached over a network ICMP Ping", host).into())
             } else {
+                let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let err_msg =
-                    if stderr.contains("not known") {
+                    if stdout.contains("could not find host") {
+                        // Windows
+                        format!("Ping returned error indicating no DNS entry for '{}'.  OS OUTPUT \
+                            RECEIVED: '{}'", host, stdout)
+                    } else if stderr.contains("not known") {
+                        // Unix
                         format!("Ping returned error indicating no DNS entry for '{}'.  OS OUTPUT \
                             RECEIVED: '{}'", host, stderr)
                     } else if stderr.contains("associated with hostname") {
+                        // Unix
                         format!("Ping returned error indicating the DNS entry is not a hostname \
                             associated with an IP address.  OS OUTPUT RECEIVED: '{}'", stderr)
+                    } else if cfg!(windows) {
+                        // Windows
+                        format!("Ping returned error.  OS OUTPUT RECEIVED - stdout: '{}' - stderr: \
+                        '{}'", stdout, stderr)
                     } else {
+                        // Unix
                         format!("Ping returned error.  OS OUTPUT RECEIVED: '{}'", stderr)
                     };
 
@@ -66,7 +85,8 @@ fn ping(host: &str) -> Result<(), Box<dyn Error>> {
             let err_msg =
                 if e.kind() == ErrorKind::NotFound {
                     "Unable to locate 'ping' executable in the local OS environment - ensure this \
-                    executable is on your environment path".to_string()
+                    executable is on your environment path (check your PATH environment \
+                    variable)".to_string()
                 } else if e.kind() == ErrorKind::PermissionDenied {
                     "Unable to run the 'ping' executable in the local OS environment due to lack \
                     of permissions - ensure the 'ping' command on your OS is assigned with \
