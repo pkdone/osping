@@ -43,6 +43,7 @@ fn ping(host: &str) -> Result<(), Box<dyn Error>> {
     }
 
     let output_res = cmd.arg(host).output();
+    
     match output_res {
         Ok(output) => {
             debug_process_output(&output);
