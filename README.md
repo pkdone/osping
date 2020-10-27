@@ -6,4 +6,3 @@ A Rust example application which uses the `ping` executable available in the und
 
 * Ubuntu 20.04 (x86-64)
 
-
